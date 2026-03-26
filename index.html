@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PassGuard — Validador de Senhas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080c10;
+    --bg-2: #0e1420;
+    --bg-3: #141b27;
+    --border: rgba(255,255,255,0.07);
+    --border-2: rgba(255,255,255,0.13);
+    --text: #e8edf5;
+    --text-muted: #7a8799;
+    --text-dim: #3d4a5a;
+    --accent: #00e5a0;
+    --accent-dim: rgba(0,229,160,0.12);
+    --accent-glow: rgba(0,229,160,0.25);
+    --warn: #f5a623;
+    --warn-dim: rgba(245,166,35,0.12);
+    --danger: #ff5252;
+    --danger-dim: rgba(255,82,82,0.12);
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --glow-size: 600px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ambient glow that follows mouse */
+  #glow {
+    position: fixed;
+    width: var(--glow-size);
+    height: var(--glow-size);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: left 0.6s ease, top 0.6s ease;
+    z-index: 0;
+    left: 50%;
+    top: 30%;
+  }
+
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 48px 0 40px;
+    text-align: center;
+    position: relative;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,229,160,0.2);
+    border-radius: 99px;
+    padding: 4px 12px;
+    margin-bottom: 20px;
+    letter-spacing: 0.05em;
+  }
+  .badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-family: var(--sans);
+    font-size: clamp(36px, 6vw, 58px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    font-size: clamp(14px, 2vw, 16px);
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 480px;
+    margin: 0 auto 40px;
+    font-weight: 400;
+  }
+
+  /* ── MAIN CARD ── */
+  .card {
+    background: var(--bg-2);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+    transition: border-color 0.3s;
+  }
+  .card:hover { border-color: rgba(255,255,255,0.18); }
+
+  .card-header {
+    padding: 20px 28px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .card-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .entropy-badge {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 4px 12px;
+    transition: all 0.3s;
+  }
+  .entropy-badge.strong { color: var(--accent); border-color: rgba(0,229,160,0.25); background: var(--accent-dim); }
+
+  .card-body { padding: 20px 28px 28px; }
+
+  /* ── INPUT ── */
+  .input-wrap {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .pw-input {
+    width: 100%;
+    padding: 16px 52px 16px 20px;
+    background: var(--bg-3);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 0.1em;
+    outline: none;
+    transition: border-color 0.25s, box-shadow 0.25s;
+    -webkit-text-security: disc;
+    text-security: disc;
+  }
+  .pw-input.visible {
+    -webkit-text-security: none;
+    text-security: none;
+  }
+  .pw-input::placeholder { color: var(--text-dim); font-size: 14px; letter-spacing: 0.04em; }
+  .pw-input:focus {
+    border-color: rgba(0,229,160,0.35);
+    box-shadow: 0 0 0 3px rgba(0,229,160,0.08);
+  }
+
+  .eye-btn {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-dim);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+  }
+  .eye-btn:hover { color: var(--text-muted); }
+
+  /* ── STRENGTH BAR ── */
+  .strength-section { margin-bottom: 24px; }
+
+  .strength-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .strength-label {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    transition: color 0.4s;
+    color: var(--text-dim);
+  }
+  .strength-label.s1 { color: var(--danger); }
+  .strength-label.s2 { color: #ff8c42; }
+  .strength-label.s3 { color: var(--warn); }
+  .strength-label.s4 { color: #7bc67e; }
+  .strength-label.s5 { color: var(--accent); }
+
+  .strength-pct {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    transition: color 0.3s;
+  }
+
+  .bar-track {
+    height: 6px;
+    background: var(--bg-3);
+    border-radius: 99px;
+    overflow: hidden;
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    width: 0%;
+    transition: width 0.5s cubic-bezier(0.34,1.56,0.64,1), background 0.4s;
+    position: relative;
+  }
+  .bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: inherit;
+    box-shadow: 0 0 8px currentColor;
+    transition: opacity 0.3s;
+    opacity: 0;
+  }
+  .bar-fill.active::after { opacity: 1; }
+
+  /* ── METRICS ── */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 480px) { .metrics { grid-template-columns: 1fr 1fr; } }
+
+  .metric {
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    text-align: center;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .metric:hover { transform: translateY(-1px); border-color: var(--border-2); }
+
+  .metric-val {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+    transition: color 0.3s;
+  }
+  .metric-lbl {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── CRITERIA ── */
+  .criteria-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .criteria-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  @media (max-width: 540px) { .criteria-grid { grid-template-columns: 1fr; } }
+
+  .crit {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-muted);
+    transition: all 0.25s;
+  }
+  .crit.ok {
+    border-color: rgba(0,229,160,0.2);
+    background: rgba(0,229,160,0.05);
+    color: var(--text);
+  }
+  .crit-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.25s;
+  }
+  .crit.ok .crit-icon {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .crit-icon svg { display: none; }
+  .crit.ok .crit-icon svg { display: block; }
+
+  /* ── TIP BOX ── */
+  .tip {
+    margin-top: 20px;
+    padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-3);
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    transition: all 0.3s;
+    min-height: 52px;
+  }
+  .tip.warn { border-color: rgba(245,166,35,0.25); background: var(--warn-dim); color: #d4a55a; }
+  .tip.ok { border-color: rgba(0,229,160,0.2); background: var(--accent-dim); color: #5ccfa0; }
+  .tip-ico { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── INFO SECTION ── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
+
+  .info-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .info-card:hover { border-color: var(--border-2); transform: translateY(-2px); }
+
+  .info-card-ico {
+    font-size: 20px;
+    margin-bottom: 10px;
+    display: block;
+  }
+  .info-card h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .info-card p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.65;
+    font-family: var(--sans);
+    font-weight: 400;
+  }
+  .info-card p strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── ENTROPY EXPLAINER ── */
+  .entropy-section {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    margin-bottom: 24px;
+  }
+
+  .entropy-section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  .entropy-section p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    margin-bottom: 18px;
+  }
+
+  .entropy-scale {
+    display: flex;
+    gap: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    height: 36px;
+    border: 1px solid var(--border);
+  }
+  .scale-seg {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 0.03em;
+  }
+  .scale-seg:nth-child(1) { background: #2a1010; color: #ff6b6b; }
+  .scale-seg:nth-child(2) { background: #271810; color: #ff9a44; }
+  .scale-seg:nth-child(3) { background: #252010; color: #f5c842; }
+  .scale-seg:nth-child(4) { background: #0f2018; color: #7ec87e; }
+  .scale-seg:nth-child(5) { background: #0a2018; color: #00e5a0; }
+
+  .scale-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 32px 0 48px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-brand {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    margin-bottom: 6px;
+  }
+  .footer-brand span { color: var(--accent); }
+
+  .footer-note {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  /* ── ANIMATION ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up {
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards;
+  }
+  .fade-up:nth-child(1) { animation-delay: 0.05s; }
+  .fade-up:nth-child(2) { animation-delay: 0.15s; }
+  .fade-up:nth-child(3) { animation-delay: 0.25s; }
+  .fade-up:nth-child(4) { animation-delay: 0.35s; }
+  .fade-up:nth-child(5) { animation-delay: 0.45s; }
+
+  /* ── SCAN LINE ── */
+  .scanline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .scanline.active {
+    opacity: 0.6;
+    animation: scan 1.2s ease forwards;
+  }
+  @keyframes scan {
+    0% { top: 0; opacity: 0.6; }
+    100% { top: 100vh; opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="glow"></div>
+<div class="scanline" id="scanline"></div>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <header class="fade-up">
+    <div class="badge">passguard v1.0 — ferramenta de segurança</div>
+    <h1>Quão segura é<br/>sua <span>senha</span>?</h1>
+    <p class="subtitle">Análise em tempo real de força, entropia e composição de caracteres — sem enviar dados a servidores.</p>
+  </header>
+
+  <!-- MAIN CARD -->
+  <div class="card fade-up">
+    <div class="card-header">
+      <span class="card-label">// entrada segura</span>
+      <span class="entropy-badge" id="entropy-badge">entropia: 0 bits</span>
+    </div>
+    <div class="card-body">
+
+      <!-- Input -->
+      <div class="input-wrap">
+        <input class="pw-input" type="text" id="pw-input" placeholder="Digite sua senha aqui..." autocomplete="off" spellcheck="false" />
+        <button class="eye-btn" id="eye-btn" title="Alternar visibilidade" aria-label="Mostrar/ocultar senha">
+          <svg id="icon-show" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+          </svg>
+          <svg id="icon-hide" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" style="display:none">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Strength -->
+      <div class="strength-section">
+        <div class="strength-header">
+          <span class="strength-label" id="strength-label">aguardando...</span>
+          <span class="strength-pct" id="strength-pct">0%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" id="bar-fill"></div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-val" id="m-len">0</div>
+          <div class="metric-lbl">caracteres</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="m-types">0/4</div>
+          <div class="metric-lbl">tipos misturados</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="m-time">—</div>
+          <div class="metric-lbl">para quebrar</div>
+        </div>
+      </div>
+
+      <!-- Criteria -->
+      <div class="criteria-title">// critérios de segurança</div>
+      <div class="criteria-grid">
+        <div class="crit" id="c-len8">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Mínimo 8 caracteres
+        </div>
+        <div class="crit" id="c-len12">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          12+ caracteres (ideal)
+        </div>
+        <div class="crit" id="c-lower">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Letras minúsculas
+        </div>
+        <div class="crit" id="c-upper">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Letras maiúsculas
+        </div>
+        <div class="crit" id="c-digit">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Números (0–9)
+        </div>
+        <div class="crit" id="c-special">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Caracteres especiais
+        </div>
+        <div class="crit" id="c-norepeat">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Sem sequências óbvias
+        </div>
+        <div class="crit" id="c-nodict">
+          <div class="crit-icon">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#080c10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Não é palavra comum
+        </div>
+      </div>
+
+      <!-- Tip -->
+      <div class="tip" id="tip-box">
+        <span class="tip-ico">💡</span>
+        <span id="tip-text">Digite sua senha acima para ver a análise completa de segurança.</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- INFO CARDS -->
+  <div class="info-grid fade-up">
+    <div class="info-card">
+      <span class="info-card-ico">🔢</span>
+      <h3>Entropia e espaço de busca</h3>
+      <p>Quanto mais tipos de caracteres, maior o "espaço de busca". Uma senha com <strong>62 bits+</strong> de entropia resiste a ataques de força bruta modernos.</p>
+    </div>
+    <div class="info-card">
+      <span class="info-card-ico">⚡</span>
+      <h3>Ataques de força bruta</h3>
+      <p>GPUs modernas testam <strong>bilhões de combinações</strong> por segundo. Comprimento e diversidade são seus maiores aliados contra esses ataques.</p>
+    </div>
+    <div class="info-card">
+      <span class="info-card-ico">📖</span>
+      <h3>Ataques de dicionário</h3>
+      <p>Palavras comuns, nomes e combinações populares são testadas primeiro. Evite palavras do dicionário mesmo que pareçam <strong>"únicas"</strong>.</p>
+    </div>
+    <div class="info-card">
+      <span class="info-card-ico">🔑</span>
+      <h3>Boas práticas</h3>
+      <p>Use um <strong>gerenciador de senhas</strong> para criar e armazenar senhas únicas e fortes. Ative sempre a autenticação de dois fatores (2FA).</p>
+    </div>
+  </div>
+
+  <!-- ENTROPY EXPLAINER -->
+  <div class="entropy-section fade-up">
+    <h2>Escala de entropia</h2>
+    <p>Entropia mede (em bits) a imprevisibilidade da sua senha. Quanto maior, mais difícil de quebrar com ataques computacionais.</p>
+    <div class="entropy-scale">
+      <div class="scale-seg">&lt;28<br/>Crítico</div>
+      <div class="scale-seg">28–35<br/>Fraca</div>
+      <div class="scale-seg">36–59<br/>Média</div>
+      <div class="scale-seg">60–127<br/>Forte</div>
+      <div class="scale-seg">128+<br/>Máxima</div>
+    </div>
+    <div class="scale-labels">
+      <span>0 bits</span>
+      <span>35</span>
+      <span>60</span>
+      <span>128+</span>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="fade-up">
+    <div class="footer-brand"><span>Pass</span>Guard</div>
+    <p class="footer-note">
+      Nenhum dado é enviado a servidores.<br/>
+      Toda análise ocorre localmente no seu navegador.<br/>
+      Feito para fins educacionais em segurança da informação.
+    </p>
+  </footer>
+
+</div>
+
+<script>
+  /* Ambient glow follows mouse */
+  document.addEventListener('mousemove', e => {
+    document.getElementById('glow').style.left = e.clientX + 'px';
+    document.getElementById('glow').style.top = e.clientY + 'px';
+  });
+
+  /* Eye toggle */
+  const pwInput = document.getElementById('pw-input');
+  const iconShow = document.getElementById('icon-show');
+  const iconHide = document.getElementById('icon-hide');
+  let visible = false;
+
+  document.getElementById('eye-btn').addEventListener('click', () => {
+    visible = !visible;
+    pwInput.classList.toggle('visible', visible);
+    iconShow.style.display = visible ? 'none' : '';
+    iconHide.style.display = visible ? '' : 'none';
+  });
+
+  /* Common words (small list for demo) */
+  const COMMON = new Set([
+    'password','senha','123456','qwerty','admin','letmein','welcome',
+    'monkey','dragon','master','abcdef','pass','test','guest','user',
+    'login','hello','brasil','futebol','amor','deus','jesus','abc123',
+    'iloveyou','sunshine','princess','shadow','football','batman','superman'
+  ]);
+
+  function hasSequential(pw) {
+    const lc = pw.toLowerCase();
+    const seqs = ['0123456789','abcdefghijklmnopqrstuvwxyz','qwertyuiopasdfghjklzxcvbnm'];
+    for (const s of seqs) {
+      for (let i = 0; i < lc.length - 2; i++) {
+        if (s.includes(lc.slice(i, i + 3))) return true;
+      }
+    }
+    return /(.)\1\1/.test(lc);
+  }
+
+  function calcEntropy(pw) {
+    let pool = 0;
+    if (/[a-z]/.test(pw)) pool += 26;
+    if (/[A-Z]/.test(pw)) pool += 26;
+    if (/[0-9]/.test(pw)) pool += 10;
+    if (/[^a-zA-Z0-9]/.test(pw)) pool += 32;
+    if (pool === 0) return 0;
+    return Math.round(pw.length * Math.log2(pool));
+  }
+
+  function crackTime(entropy) {
+    /* Assumes ~10 billion guesses/sec (modern GPU cluster) */
+    const guesses = Math.pow(2, entropy);
+    const guessesPerSec = 10e9;
+    const seconds = guesses / guessesPerSec / 2; /* avg half */
+    if (seconds < 1) return 'instantes';
+    if (seconds < 60) return Math.round(seconds) + 's';
+    if (seconds < 3600) return Math.round(seconds/60) + 'min';
+    if (seconds < 86400) return Math.round(seconds/3600) + 'h';
+    if (seconds < 31536000) return Math.round(seconds/86400) + ' dias';
+    if (seconds < 31536000*1000) return Math.round(seconds/31536000) + ' anos';
+    if (seconds < 31536000*1e6) return (seconds/31536000/1000).toFixed(0) + ' mil anos';
+    if (seconds < 31536000*1e9) return (seconds/31536000/1e6).toFixed(0) + ' mi anos';
+    return '∞ anos';
+  }
+
+  const SCORE_DATA = [
+    null,
+    { label: 'Muito fraca', cls: 's1', pct: 14, color: '#ff5252', tip: 'warn', ico: '⚠️', msg: 'Senha extremamente vulnerável. Qualquer ataque básico quebraria em instantes.' },
+    { label: 'Fraca', cls: 's2', pct: 30, color: '#ff8c42', tip: 'warn', ico: '⚠️', msg: 'Fraca para uso real. Adicione mais tipos de caracteres e aumente o comprimento.' },
+    { label: 'Razoável', cls: 's3', pct: 55, color: '#f5a623', tip: 'warn', ico: '💬', msg: 'Passável, mas pode ser melhorada. Tente chegar a 12+ caracteres com símbolos.' },
+    { label: 'Forte', cls: 's4', pct: 78, color: '#7bc67e', tip: 'ok', ico: '✅', msg: 'Senha forte! Lembre de não reutilizá-la em outros serviços.' },
+    { label: 'Excelente', cls: 's5', pct: 100, color: '#00e5a0', tip: 'ok', ico: '🛡️', msg: 'Senha excelente! Armazene-a em um gerenciador de senhas para não esquecer.' },
+  ];
+
+  function dot(id, ok) {
+    document.getElementById(id).classList.toggle('ok', ok);
+  }
+
+  function triggerScanline() {
+    const sl = document.getElementById('scanline');
+    sl.classList.remove('active');
+    void sl.offsetWidth;
+    sl.classList.add('active');
+  }
+
+  let lastScore = -1;
+
+  pwInput.addEventListener('input', () => {
+    const pw = pwInput.value;
+    const len = pw.length;
+    const hasLower = /[a-z]/.test(pw);
+    const hasUpper = /[A-Z]/.test(pw);
+    const hasDigit = /[0-9]/.test(pw);
+    const hasSpecial = /[^a-zA-Z0-9]/.test(pw);
+    const noSeq = !hasSequential(pw);
+    const noDict = !COMMON.has(pw.toLowerCase());
+    const entropy = calcEntropy(pw);
+    const types = [hasLower, hasUpper, hasDigit, hasSpecial].filter(Boolean).length;
+
+    /* Update criteria */
+    dot('c-len8', len >= 8);
+    dot('c-len12', len >= 12);
+    dot('c-lower', hasLower);
+    dot('c-upper', hasUpper);
+    dot('c-digit', hasDigit);
+    dot('c-special', hasSpecial);
+    dot('c-norepeat', noSeq && len > 0);
+    dot('c-nodict', noDict && len > 0);
+
+    /* Score */
+    let score = 0;
+    if (len === 0) score = 0;
+    else {
+      score = 1;
+      if (len >= 8 && types >= 2) score = 2;
+      if (len >= 10 && types >= 3 && noSeq) score = 3;
+      if (len >= 12 && types >= 3 && noSeq && noDict) score = 4;
+      if (len >= 16 && types === 4 && noSeq && noDict) score = 5;
+      if (entropy >= 80 && types >= 3 && noSeq && noDict && len >= 12) score = Math.max(score, 4);
+      if (entropy >= 100 && types === 4 && noSeq && noDict) score = 5;
+    }
+
+    /* Metrics */
+    document.getElementById('m-len').textContent = len;
+    document.getElementById('m-types').textContent = types + '/4';
+    document.getElementById('m-time').textContent = len > 0 ? crackTime(entropy) : '—';
+
+    /* Entropy badge */
+    const eb = document.getElementById('entropy-badge');
+    eb.textContent = 'entropia: ' + entropy + ' bits';
+    eb.className = 'entropy-badge' + (entropy >= 60 ? ' strong' : '');
+
+    if (len === 0) {
+      document.getElementById('strength-label').textContent = 'aguardando...';
+      document.getElementById('strength-label').className = 'strength-label';
+      document.getElementById('strength-pct').textContent = '0%';
+      const bar = document.getElementById('bar-fill');
+      bar.style.width = '0%';
+      bar.style.background = '';
+      bar.classList.remove('active');
+      document.getElementById('tip-box').className = 'tip';
+      document.getElementById('tip-box').querySelector('.tip-ico').textContent = '💡';
+      document.getElementById('tip-text').textContent = 'Digite sua senha acima para ver a análise completa de segurança.';
+      lastScore = -1;
+      return;
+    }
+
+    const sd = SCORE_DATA[score];
+    document.getElementById('strength-label').textContent = sd.label;
+    document.getElementById('strength-label').className = 'strength-label ' + sd.cls;
+    document.getElementById('strength-pct').textContent = sd.pct + '%';
+
+    const bar = document.getElementById('bar-fill');
+    bar.style.width = sd.pct + '%';
+    bar.style.background = sd.color;
+    bar.classList.add('active');
+
+    document.getElementById('tip-box').className = 'tip ' + sd.tip;
+    document.getElementById('tip-box').querySelector('.tip-ico').textContent = sd.ico;
+    document.getElementById('tip-text').textContent = sd.msg;
+
+    if (score !== lastScore) {
+      triggerScanline();
+      lastScore = score;
+    }
+  });
+</script>
+</body>
+</html>
